@@ -9,18 +9,19 @@ def limiting(val, max):
         return val
 
 class PIDController:
-    def __init__(self, Kp=0.0, Kd=0.0, Ki=0.0):
+    def __init__(self, Kp=0.0, Kd=0.0, Ki=0.0, max_val=5):
         self.Kp = float(Kp)
         self.Kd = float(Kd)
         self.Ki = float(Ki)
         self.err_last = 0.0
         self.err_int = 0.0
+        self.max_val = max_val
     
     def apply(self, err):
         self.err_int += err
         u = self.Kp * err + self.Kd * (err-self.err_last) + self.Ki * self.err_int
         self.err_last = err
-        return u
+        return limiting(u, self.max_val)
 
     def reset(self):
         self.err_int = 0.0
