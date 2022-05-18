@@ -9,6 +9,7 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from controllers import PIDController, NonholomonicController
 from moving_window_filter import MovingWindowFilter
+import Queue
 import warnings
 warnings.simplefilter('ignore', np.RankWarning)
 
@@ -24,10 +25,10 @@ rot_90 = np.array([0,1,-1,0], dtype=DTYPE).reshape((2,2))
 distCoeffs = np.array([0.135529, -0.197880, 0.009788, -0.003316, 0.000000], dtype=DTYPE)
 cameraMatrix = np.array([273.9783, 0.0, 151.81899, 0.0, 273.03021, 127.88242, 0.0, 0.0, 1.0],
                 dtype=DTYPE).reshape((3,3))
-top_x = 68 # 47
-top_y = 20 # 38
-bottom_x = 155
-bottom_y = 116 
+top_x = 88 # 47
+top_y = 5 # 38
+bottom_x = 160
+bottom_y = 120 
 # selecting 4 points from the original image
 pts_src = np.array([[160 - top_x, 180 - top_y], 
                     [160 + top_x, 180 - top_y], 
@@ -35,7 +36,7 @@ pts_src = np.array([[160 - top_x, 180 - top_y],
                     [160 - bottom_x, 120 + bottom_y]])
 
 # selecting 4 points from image that will be transformed
-pts_dst = np.array([[64, 0], [256, 0], [256, 240], [64, 240]])
+pts_dst = np.array([[53.3333, 0], [266.6667, 0], [266.6667, 240], [53.3333, 240]])
 # finding homography matrix
 H, status = cv2.findHomography(pts_src, pts_dst)
 H /= H[2,2]
@@ -46,6 +47,7 @@ controller = NonholomonicController(0.01, 1.5, 0.5, max_v=0.22, max_w=2.84) # 0.
 filter_x = MovingWindowFilter(1, dim=1)
 filter_y = MovingWindowFilter(1, dim=1)
 filter_t = MovingWindowFilter(2, dim=1)
+cmd_queue = Queue.Queue(maxsize=20)
 
 # ArUco stuff
 ARUCO_TAG = cv2.aruco.DICT_6X6_50
@@ -116,6 +118,7 @@ class Follower:
             
 
         img_bird_view = cv2.warpPerspective(image, H, (image.shape[1], image.shape[0]))
+        img_bird_view[img_bird_view == 0] = 255
         # img_bird_view = image
         # cv2.imshow("BEV", img_bird_view)
 
@@ -134,14 +137,14 @@ class Follower:
 
         theta = filter_t.calculate_average((theta1 + theta2) / 2)
 
-        search_top = int(h/3)
+        search_top = int(h*2/3)
         # Blind top 1/3
         mask1[0:search_top, 0:w] = 0
         mask2[0:search_top, 0:w] = 0
         # TODO 这里维护一下左右边线数组
         # Blind left and right 1/6
-        mask1[:, 0:int(w/6)] = 0
-        mask2[:, 2*int(w/6):] = 0
+        # mask1[:, 0:int(w/6)] = 0
+        # mask2[:, 2*int(w/6):] = 0
 
         mask_add = np.zeros((h,w), dtype=DTYPE)
         mask_add[:,:int(w/2)] = mask1
@@ -206,8 +209,19 @@ class Follower:
                     self.crossing_counter = 0
                     print("Refresh Stop State")
 
+            # cmd_queue.put(omega)
             self.twist.linear.x = 0.22#v
             self.twist.angular.z = omega
+            # if cmd_queue.full():
+                # self.twist.linear.x = 0.22#v
+                # omega_old = cmd_queue.get()
+
+                # if abs(omega) > 0.6:
+                #     self.twist.angular.z = omega_old #*0.8 + 0.2*omega
+                # else:
+                #     self.twist.angular.z = omega #* 0.8 + 0.2*omega_old
+
+                # cmd_queue.task_done()
 
             self.cmd_vel_pub.publish(self.twist)
         
