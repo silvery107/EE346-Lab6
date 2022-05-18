@@ -12,9 +12,9 @@ roslaunch turtlebot3_autorace_traffic_light_camera turtlebot3_autorace_camera_pi
 
 Run a intrinsic camera calibration launch file on Remote PC.
 ```
-$ export AUTO_IN_CALIB=action
-$ export GAZEBO_MODE=false
-$ roslaunch turtlebot3_autorace_traffic_light_camera turtlebot3_autorace_intrinsic_camera_calibration.launch
+export AUTO_IN_CALIB=action
+export GAZEBO_MODE=false
+roslaunch turtlebot3_autorace_traffic_light_camera turtlebot3_autorace_intrinsic_camera_calibration.launch
 ```
 <!-- Run a extrinsic camera calibration launch file on Remote PC.
 ```
@@ -29,8 +29,22 @@ python turtlebot3_lane_follower.py
 ```
 
 View calibrated images
-`rqt_image_view`
+```
+rqt_image_view
+```
 
 Change ISO if the frame is shaking
 
-`rosrun rqt_reconfigure rqt_reconfigure`
+```
+rosrun rqt_reconfigure rqt_reconfigure
+```
+
+
+
+Navigation
+```bash
+# SBC
+roslaunch turtlebot3_bringup turtlebot3_robot.launch
+# PC
+roslaunch turtlebot3_navigation turtlebot3_navigation.launch map_file:=$HOME/map_lab.yaml
+```
