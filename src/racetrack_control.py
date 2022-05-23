@@ -141,6 +141,34 @@ class Follower:
         print("Cross Flag:", self.cross_flag, "Cross Counter:", self.cross_counter)
         # print("Stop Flag:", self.stop_flag)
     
+    def start_seq(self):
+        self.start = False
+        self.start_once = True
+        self.twist.linear.x = 0.2
+        self.twist.angular.z = 0
+        if not self.disable_motor:
+            self.cmd_vel_pub.publish(self.twist)
+        rospy.sleep(2)
+        self.twist.linear.x = 0
+        self.twist.angular.z = -1.5
+        if not self.disable_motor:
+            self.cmd_vel_pub.publish(self.twist)
+        rospy.sleep(1)
+    
+    def stop_seq(self):
+        self.exit = False
+        self.exit_once = True
+        self.twist.linear.x = 0.2
+        self.twist.angular.z = 0
+        if not self.disable_motor:
+            self.cmd_vel_pub.publish(self.twist)
+        rospy.sleep(2)
+        self.twist.linear.x = 0
+        self.twist.angular.z = -1.5
+        if not self.disable_motor:
+            self.cmd_vel_pub.publish(self.twist)
+        rospy.sleep(1)
+
     def odom_callback(self, msg):
         self.positions[0] = msg.pose.pose.position.x
         self.positions[1] = msg.pose.pose.position.y
@@ -170,7 +198,6 @@ class Follower:
         img_bird_view = cv2.warpPerspective(image, homography, (IMG_W, IMG_H))
 
         span = np.linspace(0, 72, IMG_H)
-        # print(span)
         for row in range(5, IMG_H):
             img_bird_view[row, 0:int(span[row])] = 255
             img_bird_view[row, IMG_W - int(span[row]):] = 255
@@ -190,16 +217,12 @@ class Follower:
         # mask1[0:search_top, 0:w] = 0
         # mask2[0:search_top, 0:w] = 0
         
-        # Blind left and right 1/6
-        # mask1[:, 0:int(w/6)] = 0
-        # mask2[:, 2*int(w/6):] = 0
 
         mask_add = np.zeros((h,w), dtype=DTYPE)
         mask_add[:, :w/2] = mask1
         mask_add[:, w/2:] = mask2
-        # remove two small white lines from perspective transform
+        # remove white points
         mask_add = cv2.morphologyEx(mask_add, cv2.MORPH_OPEN, kernel, iterations=3)
-        # mask_add = cv2.dilate(mask_add, kernel, iterations = 2)
 
         #### *Calc Lane Orientation #####
         theta1 = get_lane_theta(mask1)
@@ -209,11 +232,9 @@ class Follower:
         if abs(theta1) > abs(theta2) and abs(theta1) > 0.3:
             theta = theta2
             self.turn_left = True
-            # print("Turning Left")
         elif abs(theta2) > abs(theta1) and abs(theta2) > 0.3:
             theta = theta1
             self.turn_right = True
-            # print("Turning Right")
         else:
             theta = (theta1 + theta2) / 2.0
         # print("theta1:%.3f, theta2: %.3f"%(theta1, theta2))
@@ -230,7 +251,8 @@ class Follower:
         cy1 = IMG_H/2
         cy2 = IMG_H/2
 
-        MOM_THR = 450000 # TODO tuning 12000
+        # TODO tuning missing
+        MOM_THR = 450000 
         if M1['m00'] > MOM_THR:
             cx1 = M1['m10']/M1['m00']
             cy1 = M1['m01']/M1['m00']
@@ -247,13 +269,9 @@ class Follower:
             self.mis_right = True
             # print("Miss Right")
 
-        #### *Corner Detect #####
-
-
-
         #### *Desition Logic #####
         # TODO tuning turn center
-        # print(match_corner(mask2))
+        # self.print_state()
         if self.turn_left:
             cx1 = cx2 - 150
             cy1 = cy2
@@ -265,15 +283,16 @@ class Follower:
                 self.start = True
                 print("[Start] Flag Triggered")
             elif self.mis_right and not self.mis_left:
-                cx2 = IMG_W - cx1 -10
+                cx2 = IMG_W - cx1 +10
                 cy2 = cy1
                 if match_corner(mask2) and not self.cross_flag and not self.cross_once:
                     self.cross_flag = True
                     print("[Cross] Flag Triggered")
                     self.cross_counter += 1
                     print("[Cross] Counts: %d"%self.cross_counter)
-                    if self.cross_counter == 4:
+                    if self.cross_counter == 4 and self.start_once:
                         self.exit = True
+                        print("[Exit] Flag Triggered")
             elif self.mis_left and not self.mis_right:
                 cx1 = IMG_W - cx2 -10
                 cy1 = cy2
@@ -281,7 +300,6 @@ class Follower:
                 #     self.cross_flag = True
                 #     print("[Cross] Flag Triggered")
 
-        # self.print_state()
         fpt_x = (cx1 + cx2)/2
         fpt_y = (cy1 + cy2)/2
 
@@ -305,7 +323,7 @@ class Follower:
             if distance > STOP_DISTANCE:
                 self.stop_once = False
                 self.cross_counter = 1
-                print("[Cross] Counts: %d"%self.cross_counter)
+                print("[Cross] Refresh Counts: %d"%self.cross_counter)
                 print("[Stop] Refresh State")
         
         #### *Crossing Logic #####
@@ -318,7 +336,7 @@ class Follower:
             distance = np.linalg.norm((self.positions-self.cross_pos))
             if distance > CROSS_DISTANCE:
                 self.cross_once = False
-                print("[Cross] Refresh  State")
+                print("[Cross] Refresh State")
 
 
         #### *Delay Logic #####
@@ -334,34 +352,11 @@ class Follower:
         #     self.cmd_queue.task_done()
 
         #### *Start & Exit Logic #####
-        # TODO Param Tuning
         if self.start:
-            self.start = False
-            self.start_once = True
-            self.twist.linear.x = 0.2
-            self.twist.angular.z = 0
-            if not self.disable_motor:
-                self.cmd_vel_pub.publish(self.twist)
-            rospy.sleep(2)
-            self.twist.linear.x = 0
-            self.twist.angular.z = -1.5
-            if not self.disable_motor:
-                self.cmd_vel_pub.publish(self.twist)
-            rospy.sleep(1)
-        
+            self.start_seq()
+
         if self.exit:
-            self.exit = False
-            self.exit_once = True
-            self.twist.linear.x = 0.2
-            self.twist.angular.z = 0
-            if not self.disable_motor:
-                self.cmd_vel_pub.publish(self.twist)
-            rospy.sleep(2)
-            self.twist.linear.x = 0
-            self.twist.angular.z = -1.5
-            if not self.disable_motor:
-                self.cmd_vel_pub.publish(self.twist)
-            rospy.sleep(1)
+            self.stop_seq()
 
         #### *Command Publish #####
         if not self.disable_motor:
@@ -370,7 +365,7 @@ class Follower:
         #### *Image Display #####
         # cv2.imshow("BEV", img_bird_view)
         # cv2.imshow("HSV", img_hsv)
-        cv2.imshow("masks", mask_add)
+        # cv2.imshow("masks", mask_add)
 
         cv2.circle(img_bird_view, (int(cx1), int(cy1)), 10, (0, 255, 255), -1)
         cv2.circle(img_bird_view, (int(cx2), int(cy2)), 10, (255, 255, 255), -1)
@@ -378,7 +373,7 @@ class Follower:
 
         cv2.line(img_bird_view, (w/2-dy*5, h), (w/2-dy*5, h-dx*5), (0, 0, 255), 2)
         cv2.line(img_bird_view, (w/2, h-2), (w/2-dy*5, h-2), (0, 0, 255), 2)
-        img_pair = np.concatenate((image, img_bird_view), axis=1)
+        img_pair = np.concatenate((image, img_bird_view, np.repeat(mask_add[:,:,None], 3, axis=2)), axis=1)
         cv2.imshow("image", img_pair)
         cv2.waitKey(1)
 
