@@ -25,7 +25,7 @@ $ roslaunch turtlebot3_autorace_traffic_light_camera turtlebot3_autorace_extrins
 Run the lane follower node
 ```
 cd ~/catkin_ws/src/EE346-Lab6/src
-python turtlebot3_lane_follower.py
+python racetrack_control.py
 ```
 
 View calibrated images
