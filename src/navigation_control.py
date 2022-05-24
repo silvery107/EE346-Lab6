@@ -12,7 +12,6 @@ from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from std_msgs.msg import String
-from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 
 
 status_list = []
@@ -35,10 +34,11 @@ rospy.Subscriber('move_base/status', GoalStatusArray, callback)
 goalPoints = [ 
     # from point1 to point2, to point3, to point4 and then back to point1
     # position[XYZ] and pose[quaternion]
+    # In our map of lab, X-direction is from bottom to top and Y-direction is from right to left
     [(3.3856, 2.5524, 0.0), (0.0, 0.0, 0.9334, 0.3587)],
-    [(0.6613, 5.3532, 0.0), (0.0, 0.0, 0.9434, -0.3315)],
+    [(0.5613, 5.3532, 0.0), (0.0, 0.0, 0.9434, -0.3315)],
     [(-2.3455, 2.4712, 0.0), (0.0, 0.0, -0.4172, 0.9088)],
-    [(0.6152, -0.4165, 0.0), (0.0, 0.0, 0.9231, 0.3846)]
+    [(0.5152, -0.5065, 0.0), (0.0, 0.0, 0.9231, -0.3846)]
 ]
 
 
@@ -85,7 +85,10 @@ def set_initial_pose():
 
 def move_forward(n):
     pointPose = goalPoints[n]
-    print("Start to move to the position point"+str(n+2))
+    if n > 2:
+        print("Start to go back to the point1")
+    else:
+        print("Start to move to the position point"+str(n+2))
     client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
     goal = send_pose(pointPose)
     client.send_goal(goal)
@@ -145,14 +148,23 @@ if __name__ == '__main__':
     #     move_forward(3)
     
         for i in range(4):
-            
+            if status == 4:
+                break
             move_forward(i)
-            time.sleep(3)
+            time.sleep(8)
+
             while(True):
             #     complete_status()
                 if status == 3:
-                    print("Arrive the point"+str(i+2))
+                    if status == 3:
+                        if i == 3:
+                            print("Arrive the point 1")
+                        else:
+                            print("Arrive the point"+str(i+2))
+                        break
+                if status == 4:
                     break
+
 
 
     rospy.spin()
