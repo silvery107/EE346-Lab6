@@ -22,7 +22,7 @@ args = parser.parse_args()
 ####################################################
 # CONSTANTS
 DTYPE = np.float32
-STOP_DISTANCE = 0.04
+STOP_DISTANCE = 0.05
 CROSS_DISTANCE = 0.3 # 0.28
 STOP_TIME = 5
 kernel = cv2.getGaussianKernel(5, 5)
@@ -74,7 +74,7 @@ class Follower:
         self.twist = Twist()
 
         # Stop State
-        self.stop_flag = False
+        self.stop = False
         self.stop_once = False
         self.timer = 0.0
         self.positions = np.zeros(3, dtype=DTYPE)
@@ -113,6 +113,7 @@ class Follower:
         rospy.on_shutdown(self.shutdown_hook)
     
     def shutdown_hook(self):
+        cv2.destroyAllWindows()
         self.cmd_vel_pub.publish(self.stop_twist)
 
     def print_state(self):
@@ -145,6 +146,17 @@ class Follower:
         self.cmd_vel_pub.publish(self.twist)
         rospy.sleep(1)
 
+    def stop_seq(self):
+        self.stop = False
+        self.stop_once = True
+        self.twist.linear.x = 0.2
+        self.twist.angular.z = 0.0
+        self.cmd_vel_pub.publish(self.twist)
+        rospy.sleep(1.5)
+        self.cmd_vel_pub.publish(self.stop_twist)
+        rospy.sleep(STOP_TIME)
+        self.stop_pos = self.positions.copy()
+
     def odom_callback(self, msg):
         self.positions[0] = msg.pose.pose.position.x
         self.positions[1] = msg.pose.pose.position.y
@@ -158,15 +170,15 @@ class Follower:
         image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
         #### *ArUco Detection #####
-        if self.cross_counter >= 4 or self.test_aruco:
+        if self.cross_counter == 4 or self.test_aruco:
             corners, ids, _ = cv2.aruco.detectMarkers(image, aruco_dictionary, parameters=aruco_parameters)
 
             if len(corners) > 0:
                 cv2.aruco.drawDetectedMarkers(image, corners, ids)
                 _, tvecs = cv2.aruco.estimatePoseSingleMarkers(corners, 0.05, cameraMatrix, distCoeffs)
-                print(tvecs.squeeze()[-1])
-                if tvecs.squeeze()[-1] < STOP_DISTANCE*10 and not self.stop_flag and not self.stop_once:
-                    self.stop_flag = True
+                # print(tvecs.squeeze()[-1])
+                if tvecs.squeeze()[-1] < STOP_DISTANCE*10 and not self.stop and not self.stop_once:
+                    self.stop = True
                     print("[Stop] Flag Triggered")
                     self.timer = rospy.get_time()
 
@@ -286,14 +298,14 @@ class Follower:
         v, omega = self.controller.apply(dx, dy, theta)
 
         #### *Stop Logic #####
-        if self.stop_flag:
-            v = 0.0
-            omega = 0.0
+        # if self.stop_flag:
+            # v = 0.0
+            # omega = 0.0
             # print("stop time: %.2f"%(rospy.get_time()-self.timer))
-            if rospy.get_time()-self.timer>=STOP_TIME:
-                self.stop_flag = False
-                self.stop_once = True
-                self.stop_pos = self.positions.copy()
+            # if rospy.get_time()-self.timer>=STOP_TIME:
+            #     self.stop_flag = False
+            #     self.stop_once = True
+            #     self.stop_pos = self.positions.copy()
         
         if self.stop_once:
             distance = np.linalg.norm((self.positions-self.stop_pos))
@@ -318,7 +330,7 @@ class Follower:
 
 
         #### *Delay Logic #####
-        self.twist.linear.x = 0.25 if not self.stop_flag else v
+        self.twist.linear.x = 0.25 # if not self.stop_flag else v
         self.twist.angular.z = omega
 
         # self.cmd_queue.put(omega)
@@ -335,12 +347,18 @@ class Follower:
                 self.start_seq()
             elif self.exit:
                 self.exit_seq()
+            elif self.stop:
+                self.stop_seq()
 
             self.cmd_vel_pub.publish(self.twist)
         else:
             self.cmd_vel_pub.publish(self.stop_twist)
 
         #### *Image Display #####
+        cv2.namedWindow("masks")
+        cv2.moveWindow("masks", 200, 200+2*IMG_W)
+        cv2.namedWindow("image")
+        cv2.moveWindow("image", 200, 200)
         # cv2.imshow("BEV", img_bird_view)
         # cv2.imshow("HSV", img_hsv)
         cv2.imshow("masks", mask_add)
@@ -351,6 +369,7 @@ class Follower:
 
         cv2.line(img_bird_view, (w/2-dy*5, h), (w/2-dy*5, h-dx*5), (0, 0, 255), 2)
         cv2.line(img_bird_view, (w/2, h-2), (w/2-dy*5, h-2), (0, 0, 255), 2)
+
         img_pair = np.concatenate((image, img_bird_view), axis=1)
         cv2.imshow("image", img_pair)
         cv2.waitKey(1)
