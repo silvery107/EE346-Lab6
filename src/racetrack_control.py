@@ -280,8 +280,9 @@ class Follower:
             cy2 = cy1
         else:
             if self.mis_left and self.mis_right and not self.start and not self.start_once:
-                self.start = True
-                print("[Start] Flag Triggered")
+                if match_corner(mask2):
+                    self.start = True
+                    print("[Start] Flag Triggered")
             elif self.mis_right and not self.mis_left:
                 cx2 = IMG_W - cx1 +10
                 cy2 = cy1
