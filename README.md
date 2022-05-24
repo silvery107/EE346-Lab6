@@ -47,4 +47,5 @@ Navigation
 roslaunch turtlebot3_bringup turtlebot3_robot.launch
 # PC
 roslaunch turtlebot3_navigation turtlebot3_navigation.launch map_file:=$HOME/map_lab.yaml
+python navigation_control.py
 ```

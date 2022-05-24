@@ -22,7 +22,7 @@
 3. Change HSV thresholds
     > Black [0, 0, 0] -> [180, 255, 46]
 
-4. Merge two mask detections, or devide one frame into left and right parts
+4. Merge two mask detections, or divide one frame into left and right parts
 
 5. Change max velocities
     linear x: `0.22`, anguler z: `2.84`. May choose a bigger value.
