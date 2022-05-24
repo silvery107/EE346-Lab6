@@ -12,10 +12,16 @@ from moving_window_filter import MovingWindowFilter
 import Queue # this is for python 2
 import warnings
 warnings.simplefilter('ignore', np.RankWarning)
+# from argparse import ArgumentParser
+
+# parser = ArgumentParser(prog="Racetrack Control")
+# parser.add_argument('--disable_motor', action='store_true')
+# parser.add_argument('--test_aruco', action='store_true')
+# args = parser.parse_args()
 ####################################################
 # CONSTANTS
 DTYPE = np.float32
-STOP_DISTANCE = 0.08
+STOP_DISTANCE = 0.04
 STOP_TIME = 5
 kernel = cv2.getGaussianKernel(5, 5)
 rot_90 = np.array([0,1,-1,0], dtype=DTYPE).reshape((2,2))
@@ -47,10 +53,10 @@ homography, status = cv2.findHomography(pts_src, pts_dst)
 homography /= homography[2,2]
 print(homography)
 
-template = cv2.imread("corner_template.png", 0)
+templates = [cv2.imread("corner_template_squ.png", 0), cv2.imread("corner_template_rec.png", 0)]
 
 # ArUco stuff
-ARUCO_TAG = cv2.aruco.DICT_6X6_50
+ARUCO_TAG = cv2.aruco.DICT_5X5_50
 aruco_dictionary = cv2.aruco.Dictionary_get(ARUCO_TAG)
 aruco_parameters = cv2.aruco.DetectorParameters_create()
 
@@ -83,13 +89,14 @@ def get_lane_theta(mask):
 def match_corner(img):
     # TODO match max
     # tempMatch = 1e10
-    match_res = cv2.matchTemplate(img, template, cv2.TM_SQDIFF_NORMED)
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(match_res)
-    # print(min_val)
-    if min_val < 0.65:
-        return True
-    else:
-        return False
+    for template in templates:
+        match_res = cv2.matchTemplate(img, template, cv2.TM_SQDIFF_NORMED)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(match_res)
+        # print(min_val)
+        if min_val < 0.6:
+            return True
+        else:
+            return False
 
 class Follower:
 
@@ -134,6 +141,7 @@ class Follower:
         self.exit_once = False
 
         self.disable_motor = False
+        self.test_aruco = False
     
     def print_state(self):
         print("Turn Left:", self.turn_left, "Turn Right:", self.turn_right)
@@ -182,14 +190,14 @@ class Follower:
         image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
         #### *ArUco Detection #####
-        if self.cross_counter >= 4:
+        if self.cross_counter >= 4 or self.test_aruco:
             corners, ids, _ = cv2.aruco.detectMarkers(image, aruco_dictionary, parameters=aruco_parameters)
 
             if len(corners) > 0:
                 cv2.aruco.drawDetectedMarkers(image, corners, ids)
-                _, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(corners, 0.1, cameraMatrix, distCoeffs)
-
-                if np.linalg.norm(tvecs.squeeze()) < STOP_DISTANCE*10 and not self.stop_flag and not self.stop_once:
+                _, tvecs = cv2.aruco.estimatePoseSingleMarkers(corners, 0.05, cameraMatrix, distCoeffs)
+                print(tvecs.squeeze()[-1])
+                if tvecs.squeeze()[-1] < STOP_DISTANCE*10 and not self.stop_flag and not self.stop_once:
                     self.stop_flag = True
                     print("[Stop] Flag Triggered")
                     self.timer = rospy.get_time()
@@ -207,7 +215,7 @@ class Follower:
         h, w, d = image.shape # (240, 320, 3)
 
         lower_black = np.array([0, 0, 0], dtype=DTYPE)
-        upper_black = np.array([180, 255, 70], dtype=DTYPE)
+        upper_black = np.array([180, 255, 90], dtype=DTYPE)
 
         mask1 = cv2.inRange(img_hsv[:,:w/2], lower_black, upper_black)
         mask2 = cv2.inRange(img_hsv[:,w/2:], lower_black, upper_black)
@@ -312,8 +320,8 @@ class Follower:
         #### *Stop Logic #####
         if self.stop_flag:
             v = 0.0
-            # omega = 0.0
-            print("stop time: %.2f"%(rospy.get_time()-self.timer))
+            omega = 0.0
+            # print("stop time: %.2f"%(rospy.get_time()-self.timer))
             if rospy.get_time()-self.timer>=STOP_TIME:
                 self.stop_flag = False
                 self.stop_once = True
@@ -321,6 +329,7 @@ class Follower:
         
         if self.stop_once:
             distance = np.linalg.norm((self.positions-self.stop_pos))
+            # print(distance)
             if distance > STOP_DISTANCE:
                 self.stop_once = False
                 self.cross_counter = 1
@@ -341,7 +350,7 @@ class Follower:
 
 
         #### *Delay Logic #####
-        self.twist.linear.x = 0.25 #v
+        self.twist.linear.x = 0.25 if not self.stop_flag else v
         self.twist.angular.z = omega
 
         # self.cmd_queue.put(omega)
@@ -366,7 +375,7 @@ class Follower:
         #### *Image Display #####
         # cv2.imshow("BEV", img_bird_view)
         # cv2.imshow("HSV", img_hsv)
-        # cv2.imshow("masks", mask_add)
+        cv2.imshow("masks", mask_add)
 
         cv2.circle(img_bird_view, (int(cx1), int(cy1)), 10, (0, 255, 255), -1)
         cv2.circle(img_bird_view, (int(cx2), int(cy2)), 10, (255, 255, 255), -1)
@@ -374,7 +383,7 @@ class Follower:
 
         cv2.line(img_bird_view, (w/2-dy*5, h), (w/2-dy*5, h-dx*5), (0, 0, 255), 2)
         cv2.line(img_bird_view, (w/2, h-2), (w/2-dy*5, h-2), (0, 0, 255), 2)
-        img_pair = np.concatenate((image, img_bird_view, np.repeat(mask_add[:,:,None], 3, axis=2)), axis=1)
+        img_pair = np.concatenate((image, img_bird_view), axis=1)
         cv2.imshow("image", img_pair)
         cv2.waitKey(1)
 
