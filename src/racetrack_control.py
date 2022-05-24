@@ -2,8 +2,8 @@
 
 import rospy
 import cv2
-import cv_bridge
 import numpy as np
+import cv_bridge
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -12,16 +12,18 @@ from moving_window_filter import MovingWindowFilter
 import Queue # this is for python 2
 import warnings
 warnings.simplefilter('ignore', np.RankWarning)
-# from argparse import ArgumentParser
+from utils import check_coord, match_corner, get_lane_theta
+from argparse import ArgumentParser
 
-# parser = ArgumentParser(prog="Racetrack Control")
-# parser.add_argument('--disable_motor', action='store_true')
-# parser.add_argument('--test_aruco', action='store_true')
-# args = parser.parse_args()
+parser = ArgumentParser(prog="Racetrack Control")
+parser.add_argument('--disable-motor', action='store_true')
+parser.add_argument('--test-aruco', action='store_true')
+args = parser.parse_args()
 ####################################################
 # CONSTANTS
 DTYPE = np.float32
 STOP_DISTANCE = 0.04
+CROSS_DISTANCE = 0.3 # 0.28
 STOP_TIME = 5
 kernel = cv2.getGaussianKernel(5, 5)
 rot_90 = np.array([0,1,-1,0], dtype=DTYPE).reshape((2,2))
@@ -53,59 +55,22 @@ homography, status = cv2.findHomography(pts_src, pts_dst)
 homography /= homography[2,2]
 print(homography)
 
-templates = [cv2.imread("corner_template_squ.png", 0), cv2.imread("corner_template_rec.png", 0)]
+# templates = [cv2.imread("corner_template_squ.png", 0), cv2.imread("corner_template_rec.png", 0)]
 
 # ArUco stuff
 ARUCO_TAG = cv2.aruco.DICT_5X5_50
 aruco_dictionary = cv2.aruco.Dictionary_get(ARUCO_TAG)
 aruco_parameters = cv2.aruco.DetectorParameters_create()
-
-CROSS_DISTANCE = 0.28 # 28 cm
 ####################################################
-
-def check_coord(coord):
-    if coord[0]<0 and coord[1]<0:
-        return -coord
-    elif coord[0]<0 and coord[1]>0:
-        return -coord
-    else:
-        return coord
-
-def get_lane_theta(mask):
-    theta = 0.0
-    mask_eroded = cv2.erode(mask, kernel, iterations=2)
-    contours, _ = cv2.findContours(mask_eroded, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_SIMPLE)[-2:]
-    if contours:
-        line_param = cv2.fitLine(contours[0], distType=cv2.DIST_L2, param=0, reps=0.01, aeps=0.01)
-        new_coord = rot_90.dot(np.array([line_param[0], line_param[1]],dtype=DTYPE).reshape((2,1)))
-        new_coord = check_coord(new_coord) + 1e-5
-        theta = np.arctan2(new_coord[1], new_coord[0])
-        # print(np.abs(theta)-np.pi/2)
-        if np.isclose(np.abs(theta), np.pi/2, 1e-4):
-            theta = 0.0
-
-    return theta
-
-def match_corner(img):
-    # TODO match max
-    # tempMatch = 1e10
-    for template in templates:
-        match_res = cv2.matchTemplate(img, template, cv2.TM_SQDIFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(match_res)
-        # print(min_val)
-        if min_val < 0.6:
-            return True
-        else:
-            return False
 
 class Follower:
 
     def __init__(self):
-
+        # Components
         self.bridge = cv_bridge.CvBridge()
         self.image_sub = rospy.Subscriber('camera/image', Image, self.image_callback)
         self.odom_sub = rospy.Subscriber('odom', Odometry, self.odom_callback)
-        self.cmd_vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
+        self.cmd_vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size=5) # 10
         self.twist = Twist()
 
         # Stop State
@@ -133,6 +98,7 @@ class Follower:
         self.cross_once = False
         self.cross_counter = 1
         self.cross_pos = None
+        self.corner_templates = [cv2.imread("corner_template_squ.png", 0), cv2.imread("corner_template_rec.png", 0)]
 
         # Start & Exit State
         self.start = False
@@ -140,9 +106,15 @@ class Follower:
         self.exit = False
         self.exit_once = False
 
-        self.disable_motor = False
-        self.test_aruco = False
+        # Testing Flag
+        self.disable_motor = not args.disable_motor
+        self.test_aruco = not args.test_aruco
+        self.stop_twist = Twist()
+        rospy.on_shutdown(self.shutdown_hook)
     
+    def shutdown_hook(self):
+        self.cmd_vel_pub.publish(self.stop_twist)
+
     def print_state(self):
         print("Turn Left:", self.turn_left, "Turn Right:", self.turn_right)
         print("Miss Left:", self.mis_left, "Miss Right:", self.mis_right)
@@ -153,28 +125,24 @@ class Follower:
         self.start = False
         self.start_once = True
         self.twist.linear.x = 0.2
-        self.twist.angular.z = 0
-        if not self.disable_motor:
-            self.cmd_vel_pub.publish(self.twist)
+        self.twist.angular.z = 0.0
+        self.cmd_vel_pub.publish(self.twist)
         rospy.sleep(2)
-        self.twist.linear.x = 0
+        self.twist.linear.x = 0.0
         self.twist.angular.z = -1.5
-        if not self.disable_motor:
-            self.cmd_vel_pub.publish(self.twist)
+        self.cmd_vel_pub.publish(self.twist)
         rospy.sleep(1)
     
-    def stop_seq(self):
+    def exit_seq(self):
         self.exit = False
         self.exit_once = True
         self.twist.linear.x = 0.2
-        self.twist.angular.z = 0
-        if not self.disable_motor:
-            self.cmd_vel_pub.publish(self.twist)
+        self.twist.angular.z = 0.0
+        self.cmd_vel_pub.publish(self.twist)
         rospy.sleep(2)
         self.twist.linear.x = 0
         self.twist.angular.z = -1.5
-        if not self.disable_motor:
-            self.cmd_vel_pub.publish(self.twist)
+        self.cmd_vel_pub.publish(self.twist)
         rospy.sleep(1)
 
     def odom_callback(self, msg):
@@ -233,8 +201,8 @@ class Follower:
         mask_add = cv2.morphologyEx(mask_add, cv2.MORPH_OPEN, kernel, iterations=3)
 
         #### *Calc Lane Orientation #####
-        theta1 = get_lane_theta(mask1)
-        theta2 = get_lane_theta(mask2)
+        theta1 = get_lane_theta(mask1, kernel)
+        theta2 = get_lane_theta(mask2, kernel)
         theta = 0.0
 
         if abs(theta1) > abs(theta2) and abs(theta1) > 0.3:
@@ -288,13 +256,13 @@ class Follower:
             cy2 = cy1
         else:
             if self.mis_left and self.mis_right and not self.start and not self.start_once:
-                if match_corner(mask2):
+                if match_corner(mask2, self.corner_templates):
                     self.start = True
                     print("[Start] Flag Triggered")
             elif self.mis_right and not self.mis_left:
                 cx2 = IMG_W - cx1 +10
                 cy2 = cy1
-                if match_corner(mask2) and not self.cross_flag and not self.cross_once:
+                if match_corner(mask2, self.corner_templates) and not self.cross_flag and not self.cross_once:
                     self.cross_flag = True
                     print("[Cross] Flag Triggered")
                     self.cross_counter += 1
@@ -361,16 +329,16 @@ class Follower:
 
         #     self.cmd_queue.task_done()
 
-        #### *Start & Exit Logic #####
-        if self.start:
-            self.start_seq()
-
-        if self.exit:
-            self.stop_seq()
-
         #### *Command Publish #####
         if not self.disable_motor:
+            if self.start:
+                self.start_seq()
+            elif self.exit:
+                self.exit_seq()
+
             self.cmd_vel_pub.publish(self.twist)
+        else:
+            self.cmd_vel_pub.publish(self.stop_twist)
 
         #### *Image Display #####
         # cv2.imshow("BEV", img_bird_view)
