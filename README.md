@@ -1,4 +1,4 @@
-# EE346-Lab6
+# EE346 Lab6
 
 ## Part I Camera Calibration
 
