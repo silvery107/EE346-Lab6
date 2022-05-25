@@ -35,7 +35,7 @@ Here shows the camera intrinsic matrix
        ```
 
 4. Run the lane follower node
-    ```
+    ```bash
     cd ~/catkin_ws/src/EE346-Lab6/src
     python racetrack_control.py
     ```
