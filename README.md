@@ -1,51 +1,51 @@
 # EE346-Lab6
 
-Launch roscore on Remote PC.
-```
-roscore
-```
-Trigger the camera and bringup the turtlebot on SBC.
-```
-roslaunch turtlebot3_bringup turtlebot3_robot.launch
-roslaunch turtlebot3_autorace_traffic_light_camera turtlebot3_autorace_camera_pi.launch
-```
+## Part I Camera Calibration
 
-Run a intrinsic camera calibration launch file on Remote PC.
-```
-export AUTO_IN_CALIB=action
-export GAZEBO_MODE=false
-roslaunch turtlebot3_autorace_traffic_light_camera turtlebot3_autorace_intrinsic_camera_calibration.launch
-```
-<!-- Run a extrinsic camera calibration launch file on Remote PC.
-```
-$ export AUTO_EX_CALIB=action
-$ roslaunch turtlebot3_autorace_traffic_light_camera turtlebot3_autorace_extrinsic_camera_calibration.launch
-``` -->
+[Camera Calibration YAML](src/camera.yaml)
 
-Run the lane follower node
-```
-cd ~/catkin_ws/src/EE346-Lab6/src
-python racetrack_control.py
-```
+## Part II Lane Following
+1. Launch roscore on Remote PC.
+    ```
+    roscore
+    ```
+2. Trigger the camera and bringup the turtlebot on SBC.
+    ```bash
+    roslaunch turtlebot3_bringup turtlebot3_robot.launch
+    roslaunch turtlebot3_autorace_traffic_light_camera turtlebot3_autorace_camera_pi.launch
+    ```
 
-View calibrated images
-```
-rqt_image_view
-```
+3. Run a intrinsic camera calibration launch file on Remote PC.
+    ```bash
+    export AUTO_IN_CALIB=action
+    export GAZEBO_MODE=false
+    roslaunch turtlebot3_autorace_traffic_light_camera turtlebot3_autorace_intrinsic_camera_calibration.launch
+    ```
 
-Change ISO if the frame is shaking
+   - View calibrated images
+       ```
+       rqt_image_view
+       ```
 
-```
-rosrun rqt_reconfigure rqt_reconfigure
-```
+   - Change ISO if the frame is shaking
 
+       ```
+       rosrun rqt_reconfigure rqt_reconfigure
+       ```
 
+4. Run the lane follower node
+    ```
+    cd ~/catkin_ws/src/EE346-Lab6/src
+    python racetrack_control.py
+    ```
+## Part III Navigation
 
-Navigation
+1. SBC
 ```bash
-# SBC
 roslaunch turtlebot3_bringup turtlebot3_robot.launch
-# PC
+```
+2. PC
+```bash
 roslaunch turtlebot3_navigation turtlebot3_navigation.launch map_file:=$HOME/map_lab.yaml
 python navigation_control.py
 ```
