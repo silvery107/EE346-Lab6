@@ -32,7 +32,8 @@ def match_corner(img, templates):
         match_res = cv2.matchTemplate(img, template, cv2.TM_SQDIFF_NORMED)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(match_res)
         # print(min_val)
-        if min_val < 0.6:
+        if min_val < 0.55:
+            # print("[Cross] Corner Matched")
             return True
         else:
             return False
