@@ -2,6 +2,7 @@
 
 ## Part I Camera Calibration
 
+Here shows the camera intrinsic matrix
 [Camera Calibration YAML](src/camera.yaml)
 
 ## Part II Lane Following
