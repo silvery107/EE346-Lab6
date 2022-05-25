@@ -36,9 +36,11 @@ goalPoints = [
     # position[XYZ] and pose[quaternion]
     # In our map of lab, X-direction is from bottom to top and Y-direction is from right to left
     [(3.3856, 2.5524, 0.0), (0.0, 0.0, 0.9334, 0.3587)],
-    [(0.5613, 5.3532, 0.0), (0.0, 0.0, 0.9434, -0.3315)],
-    [(-2.3455, 2.4712, 0.0), (0.0, 0.0, -0.4172, 0.9088)],
-    [(0.5152, -0.5065, 0.0), (0.0, 0.0, 0.9231, -0.3846)]
+    [(0.5313, 5.3832, 0.0), (0.0, 0.0, 0.9434, -0.3315)],
+    [(-2.3655, 2.4412, 0.0), (0.0, 0.0, -0.4172, 0.9088)],
+    [(0.5152, -0.5065, 0.0), (0.0, 0.0, 0.9231, -0.3846)],
+    [(0.5152, -0.5065, 0.0), (0.0, 0.0, 0.9334, 0.3587)],
+    
 ]
 
 
@@ -66,8 +68,8 @@ def set_initial_pose():
     init_pose.pose.pose.position.z = 0.0
     init_pose.pose.pose.orientation.x = 0.0
     init_pose.pose.pose.orientation.y = 0.0
-    init_pose.pose.pose.orientation.z = 0.3917
-    init_pose.pose.pose.orientation.w = 0.9201
+    init_pose.pose.pose.orientation.z = 0.9334
+    init_pose.pose.pose.orientation.w = 0.3587
     init_pose.pose.covariance[0] = 0.25
     init_pose.pose.covariance[7] = 0.25
     init_pose.pose.covariance[35] =  0.06853892326654787
@@ -76,7 +78,7 @@ def set_initial_pose():
     # msg_pub = rospy.Publisher('/amcl_pose', PoseWithCovarianceStamped, queue_size=1)
     msg_pub = rospy.Publisher("initialpose",PoseWithCovarianceStamped,latch=True, queue_size=1)
     msg_pub.publish(init_pose)
-    pointPose = goalPoints[3]
+    pointPose = goalPoints[4]
     client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
     goal = send_pose(pointPose)
     client.send_goal(goal)
