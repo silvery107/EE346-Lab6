@@ -42,11 +42,11 @@ Here shows the camera intrinsic matrix
 ## Part III Navigation
 
 1. SBC
-```bash
-roslaunch turtlebot3_bringup turtlebot3_robot.launch
-```
+    ```bash
+    roslaunch turtlebot3_bringup turtlebot3_robot.launch
+    ```
 2. PC
-```bash
-roslaunch turtlebot3_navigation turtlebot3_navigation.launch map_file:=$HOME/map_lab.yaml
-python navigation_control.py
-```
+    ```bash
+    roslaunch turtlebot3_navigation turtlebot3_navigation.launch map_file:=$HOME/map_lab.yaml
+    python navigation_control.py
+    ```
