@@ -22,9 +22,9 @@ args = parser.parse_args()
 ####################################################
 # CONSTANTS
 DTYPE = np.float32
-STOP_DISTANCE = 0.05
-CROSS_DISTANCE = 0.3 # 0.28
-STOP_TIME = 5
+STOP_DISTANCE = 0.055
+CROSS_DISTANCE = 0.4 # 0.28
+STOP_TIME = 60
 kernel = cv2.getGaussianKernel(5, 5)
 rot_90 = np.array([0,1,-1,0], dtype=DTYPE).reshape((2,2))
 
@@ -58,7 +58,7 @@ print(homography)
 # templates = [cv2.imread("corner_template_squ.png", 0), cv2.imread("corner_template_rec.png", 0)]
 
 # ArUco stuff
-ARUCO_TAG = cv2.aruco.DICT_5X5_50
+ARUCO_TAG = cv2.aruco.DICT_6X6_50
 aruco_dictionary = cv2.aruco.Dictionary_get(ARUCO_TAG)
 aruco_parameters = cv2.aruco.DetectorParameters_create()
 ####################################################
@@ -70,7 +70,7 @@ class Follower:
         self.bridge = cv_bridge.CvBridge()
         self.image_sub = rospy.Subscriber('camera/image', Image, self.image_callback)
         self.odom_sub = rospy.Subscriber('odom', Odometry, self.odom_callback)
-        self.cmd_vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size=5) # 10
+        self.cmd_vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size=1) # 10
         self.twist = Twist()
 
         # Stop State
@@ -98,7 +98,9 @@ class Follower:
         self.cross_once = False
         self.cross_counter = 1
         self.cross_pos = None
-        self.corner_templates = [cv2.imread("corner_template_squ.png", 0), cv2.imread("corner_template_rec.png", 0)]
+        self.corner_templates = [cv2.imread("corner_template_squ.png", 0), 
+                                cv2.imread("corner_template_rec.png", 0),
+                                cv2.imread("corner_template_sharp.png", 0)]
 
         # Start & Exit State
         self.start = False
@@ -107,10 +109,13 @@ class Follower:
         self.exit_once = False
 
         # Testing Flag
-        self.disable_motor = not args.disable_motor
-        self.test_aruco = not args.test_aruco
+        self.disable_motor = args.disable_motor
+        self.test_aruco = args.test_aruco
         self.stop_twist = Twist()
         rospy.on_shutdown(self.shutdown_hook)
+
+        self.cmd_vel_pub.publish(self.stop_twist)
+        rospy.sleep(1)
     
     def shutdown_hook(self):
         cv2.destroyAllWindows()
@@ -121,40 +126,40 @@ class Follower:
         print("Miss Left:", self.mis_left, "Miss Right:", self.mis_right)
         print("Cross Flag:", self.cross_flag, "Cross Counter:", self.cross_counter)
         # print("Stop Flag:", self.stop_flag)
-    
+
     def start_seq(self):
         self.start = False
-        self.start_once = True
         self.twist.linear.x = 0.2
         self.twist.angular.z = 0.0
         self.cmd_vel_pub.publish(self.twist)
-        rospy.sleep(2)
+        rospy.sleep(2.3)
         self.twist.linear.x = 0.0
         self.twist.angular.z = -1.5
         self.cmd_vel_pub.publish(self.twist)
         rospy.sleep(1)
+        self.start_once = True
     
     def exit_seq(self):
         self.exit = False
-        self.exit_once = True
         self.twist.linear.x = 0.2
         self.twist.angular.z = 0.0
         self.cmd_vel_pub.publish(self.twist)
-        rospy.sleep(2)
+        rospy.sleep(2.3)
         self.twist.linear.x = 0
         self.twist.angular.z = -1.5
         self.cmd_vel_pub.publish(self.twist)
         rospy.sleep(1)
+        self.exit_once = True
 
     def stop_seq(self):
         self.stop = False
-        self.stop_once = True
         self.twist.linear.x = 0.2
         self.twist.angular.z = 0.0
         self.cmd_vel_pub.publish(self.twist)
-        rospy.sleep(1.5)
+        rospy.sleep(2)
         self.cmd_vel_pub.publish(self.stop_twist)
         rospy.sleep(STOP_TIME)
+        self.stop_once = True
         self.stop_pos = self.positions.copy()
 
     def odom_callback(self, msg):
@@ -170,7 +175,7 @@ class Follower:
         image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
         #### *ArUco Detection #####
-        if self.cross_counter == 4 or self.test_aruco:
+        if self.cross_counter == 5 or self.test_aruco:
             corners, ids, _ = cv2.aruco.detectMarkers(image, aruco_dictionary, parameters=aruco_parameters)
 
             if len(corners) > 0:
@@ -240,7 +245,7 @@ class Follower:
         cy2 = IMG_H/2
 
         # TODO tuning missing
-        MOM_THR = 450000 
+        MOM_THR = 400000 
         if M1['m00'] > MOM_THR:
             cx1 = M1['m10']/M1['m00']
             cy1 = M1['m01']/M1['m00']
@@ -267,27 +272,25 @@ class Follower:
             cx2 = cx1 + 150
             cy2 = cy1
         else:
-            if self.mis_left and self.mis_right and not self.start and not self.start_once:
-                if match_corner(mask2, self.corner_templates):
+            if match_corner(mask2, self.corner_templates):
+                if self.cross_counter == 1 and not self.start and not self.start_once:
                     self.start = True
                     print("[Start] Flag Triggered")
-            elif self.mis_right and not self.mis_left:
-                cx2 = IMG_W - cx1 +10
-                cy2 = cy1
-                if match_corner(mask2, self.corner_templates) and not self.cross_flag and not self.cross_once:
-                    self.cross_flag = True
-                    print("[Cross] Flag Triggered")
+                elif not self.cross_flag and not self.cross_once and self.start_once:
                     self.cross_counter += 1
                     print("[Cross] Counts: %d"%self.cross_counter)
-                    if self.cross_counter == 4 and self.start_once:
+                    self.cross_flag = True
+                    print("[Cross] Flag Triggered")
+                    if self.cross_counter == 5 and self.start_once:
                         self.exit = True
                         print("[Exit] Flag Triggered")
+
+            if self.mis_right and not self.mis_left:
+                cx2 = IMG_W - cx1 +10
+                cy2 = cy1
             elif self.mis_left and not self.mis_right:
                 cx1 = IMG_W - cx2 -10
                 cy1 = cy2
-                # if not self.cross_flag and not self.cross_once:
-                #     self.cross_flag = True
-                #     print("[Cross] Flag Triggered")
 
         fpt_x = (cx1 + cx2)/2
         fpt_y = (cy1 + cy2)/2
@@ -330,7 +333,7 @@ class Follower:
 
 
         #### *Delay Logic #####
-        self.twist.linear.x = 0.25 # if not self.stop_flag else v
+        self.twist.linear.x = 0.22 if not (self.turn_left or self.turn_right) else 0.18
         self.twist.angular.z = omega
 
         # self.cmd_queue.put(omega)
