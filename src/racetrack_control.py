@@ -294,21 +294,7 @@ class Follower:
         fpt_x = (cx1 + cx2)/2
         fpt_y = (cy1 + cy2)/2
 
-        dx = self.filter_x.calculate_average(fpt_y/10.0)
-        dy = self.filter_y.calculate_average(w/2 - fpt_x)
-
-        v, omega = self.controller.apply(dx, dy, theta)
-
-        #### *Stop Logic #####
-        # if self.stop_flag:
-            # v = 0.0
-            # omega = 0.0
-            # print("stop time: %.2f"%(rospy.get_time()-self.timer))
-            # if rospy.get_time()-self.timer>=STOP_TIME:
-            #     self.stop_flag = False
-            #     self.stop_once = True
-            #     self.stop_pos = self.positions.copy()
-        
+        #### *Stop Logic #####        
         if self.stop_once:
             distance = np.linalg.norm((self.positions-self.stop_pos))
             # print(distance)
@@ -330,11 +316,15 @@ class Follower:
                 self.cross_once = False
                 print("[Cross] Refresh State")
 
+        #### *Execute Controller #####
+        dx = self.filter_x.calculate_average(fpt_y/10.0)
+        dy = self.filter_y.calculate_average(w/2 - fpt_x)
 
-        #### *Delay Logic #####
+        v, omega = self.controller.apply(dx, dy, theta)
         self.twist.linear.x = 0.22 if not (self.turn_left or self.turn_right) else 0.18
         self.twist.angular.z = omega
 
+        #### *Delay Logic #####
         # self.cmd_queue.put(omega)
         # if self.cmd_queue.full():
         #     omega_old = self.cmd_queue.get()
