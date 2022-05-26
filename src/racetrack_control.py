@@ -98,9 +98,9 @@ class Follower:
         self.cross_once = False
         self.cross_counter = 1
         self.cross_pos = None
-        self.corner_templates = [cv2.imread("corner_template_squ.png", 0), 
-                                cv2.imread("corner_template_rec.png", 0),
-                                cv2.imread("corner_template_sharp.png", 0)]
+        self.corner_templates = [cv2.imread("templates/corner_template_squ.png", 0), 
+                                cv2.imread("templates/corner_template_rec.png", 0),
+                                cv2.imread("templates/corner_template_sharp.png", 0)]
 
         # Start & Exit State
         self.start = False
