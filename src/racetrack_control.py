@@ -118,7 +118,6 @@ class Follower:
         rospy.sleep(1)
     
     def shutdown_hook(self):
-        cv2.destroyAllWindows()
         self.cmd_vel_pub.publish(self.stop_twist)
 
     def print_state(self):
