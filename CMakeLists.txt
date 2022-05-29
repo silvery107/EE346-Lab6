@@ -158,8 +158,8 @@ include_directories(
 ## Mark executable scripts (Python etc.) for installation
 ## in contrast to setup.py, you can choose the destination
 catkin_install_python(PROGRAMS
-  src/lane_following_part3.py
-  src/turtlebot3_lane_follower.py
+  src/navigation_control.py
+  src/racetrack_control.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
